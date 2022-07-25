@@ -1,0 +1,58 @@
+---
+
+- hosts: servers, client_machines
+  strategy: linear
+  vars:
+    pwd: "{{ lookup('pipe', 'pwd') }}"
+  pre_tasks:
+    # TODO fix this for arm64
+    # - name: Install docker
+      # include_role:
+        # name: geerlingguy.docker
+      # vars:
+        # docker_users:
+          # - root
+      # tags: docker-install
+    - name: Install python docker deps
+      pip:
+        name: docker
+
+  tasks:
+    - name: Upload source code
+      block:
+        - name: Clone code repo
+          git:
+            repo: 'git@github.com:industrial-immersion/FLModel.git'
+            version: main
+            dest: /tmp/code
+            depth: 1
+          delegate_to: localhost
+          register: _result
+          run_once: true
+
+        - name: Create archive of code
+          archive:
+            path: /tmp/code
+            dest: /tmp/code.gz
+            exclude_path:
+              - '.git'
+          delegate_to: localhost
+          run_once: true
+          when: _result is changed
+
+        - name: Upload code
+          unarchive:
+            src: /tmp/code.gz
+            dest: "{{ workspace_dir }}"
+
+    - name: Create systemd file to manage the docker containers
+      template:
+        src: flwr-model.service.j2
+        dest: /etc/systemd/system/flwr-model.service
+      vars:
+        systemd_working_dir: "{{ dataset_dir }}"
+
+    - name: Pull image
+      community.docker.docker_image:
+        name: "{{ docker_image }}"
+        source: pull

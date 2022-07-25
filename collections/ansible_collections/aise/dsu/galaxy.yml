@@ -1,0 +1,8 @@
+---
+
+namespace: aise
+name: dsu
+version: 1.0.0
+authors:
+  - me
+readme: README.md

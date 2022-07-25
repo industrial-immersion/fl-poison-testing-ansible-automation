@@ -1,0 +1,33 @@
+---
+
+- name: Run the app in the server
+  hosts: servers
+  tasks:
+    - name: Run the docker image for the server
+      systemd:
+        name: flwr-model.server
+        daemon_reload: true
+        state: started
+      env:
+        flmodel_role: server
+        flmodel_config: /app/configs/config.docker.yml
+
+- name: Run the app in the clients
+  hosts: docker_clients
+  tasks:
+    - name: Check the server is up
+      wait_for:
+        host: "{{ server }}"
+        port: 8080
+      loop: "{{ groups['servers'] }}"
+      loop_control:
+        loop_var: server
+
+    - name: Run the docker image for the clients
+      systemd:
+        name: "flwr-model.{{ inventory_hostame }}"
+        daemon_reload: true
+        state: started
+      env:
+        flmodel_role: client
+        flmodel_config: /app/configs/config.docker.yml

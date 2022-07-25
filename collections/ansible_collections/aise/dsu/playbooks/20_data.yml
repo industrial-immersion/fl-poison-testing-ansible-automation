@@ -1,0 +1,145 @@
+---
+
+- name: Download and split the CINIC-10 dataset in place
+  hosts: docker_clients
+  gather_facts: false
+  vars:
+    local_workdir: "/home/{{ lookup('env', 'USER') }}/cinic_10_per_client"
+    train_zip: "{{ local_workdir }}/i{{ client_index }}c{{ num_of_clients }}.zip"
+    client_index: "{{ groups['docker_clients'].index(inventory_hostname) }}"
+    num_of_clients: "{{ groups['docker_clients'] | length }}"
+  pre_tasks:
+    - delegate_to: localhost
+      run_once: true
+      block:
+        - name: Download CINIC-10 dataset
+          get_url:
+            url: 'https://share.ialab.dsu.edu/DSU_AI_Sweden/fl_data.zip'
+            dest: "{{ local_workdir }}/fl_data.zip"
+            checksum: 'md5:cbbdd8689af38337ce05cadbf406d0c6'
+
+        - name: Extract dataset locally
+          command: unzip -q "{{ local_workdir }}/fl_data.zip"
+          args:
+            creates: "{{ local_workdir }}/fl_data/train"
+
+  tasks:
+    - name: Create zip files of test and validation images
+      delegate_to: localhost
+      archive:
+        path:
+          - "{{ local_workdir }}/fl_data/test"
+          - "{{ local_workdir }}/fl_data/valid"
+        dest: "{{ local_workdir }}/test-valid.zip"
+      when: (local_workdir + "/test-valid.zip") is not exists
+
+    - name: Create zip with train files
+      delegate_to: localhost
+      vars:
+        train_folder: 'train'
+      block: &create_zip
+        - name: Stop creating zip files if already in place
+          meta: end_play
+          when: train_zip is exists | bool
+
+        - name: Read the class folders from the dataset
+          set_fact:
+            classes: "{{ lookup('pipe', 'ls {{ local_workdir }}/fl_data/' + train_folder).split() }}"
+          run_once: true
+
+        - name: Reset variables
+          set_fact:
+            train_images: {}
+
+        - name: Append the images in the "{{ train_folder }}" folder
+          set_fact:
+            train_images:
+              "{{ train_images
+                  | combine({
+                      class:
+                        [] | zip_longest(
+                              lookup('pipe', 'ls {{ local_workdir }}/fl_data/' + train_folder + '/' + class).split(),
+                              fillvalue=local_workdir + '/fl_data' + train_folder + '/' + class
+                        )
+                        | map('path_join')
+                    })
+               }}"
+          loop: "{{ classes }}"
+          loop_control:
+            loop_var: class
+          run_once: true
+          no_log: true
+
+        - name: Gather all files that need to be in the client zip per train folder
+          set_fact:
+            client_files: "{{ client_files | d([]) + files }}"
+          loop: "{{ classes }}"
+          loop_control:
+            loop_var: class
+          vars:
+            start_file: "{{ client_index|int * offset|int }}"
+            offset: "{{ (train_images[class] | length | int / num_of_clients | int) | round(method='floor') | int}}"
+            files: "{{ train_images[class][start_file|int : start_file|int + offset|int] }}"
+          no_log: true
+
+
+    - vars:
+        train_folder: 'train_label_poison'
+      block: *create_zip
+
+    - vars:
+        train_folder: 'train_data_poison'
+      block: *create_zip
+
+    - name: Create zip files with specific files for client
+      archive:
+        path: "{{ client_files }}"
+        dest: "{{ train_zip }}"
+        format: zip
+      delegate_to: localhost
+      no_log: true
+
+
+- name: Upload images to clients
+  hosts: docker_clients
+  gather_facts: false
+  tags: extract_dataset
+  vars:
+    local_workdir: "/home/{{ lookup('env', 'USER') }}/cinic_10_per_client"
+    client_index: "{{ groups['docker_clients'].index(inventory_hostname) }}"
+    num_of_clients: "{{ groups['docker_clients'] | length }}"
+    train_zip: "{{ local_workdir }}/i{{ client_index }}c{{ num_of_clients }}.zip"
+    extraction_path: "{{ dataset_dir }}/{{ (train_zip | basename | splitext)[0] }}"
+  tasks:
+    - delegate_to: "{{ docker_server }}"
+      block:
+        - name: Create train directory
+          file:
+            path: "{{ extraction_path }}"
+            state: directory
+
+        - name: Extract the train archive
+          unarchive:
+            src: "{{ train_zip }}"
+            dest: "{{ extraction_path }}"
+
+        - name: Create a link to the currrent train folder
+          file:
+            state: link
+            src: "{{ extraction_path }}"
+            dest: "{{ extraction_path | dirname }}/train"
+
+        - name: Extract the test and validation datasets
+          unarchive:
+            src: "{{ local_workdir }}/test-valid.zip"
+            dest: "{{ dataset_dir }}"
+
+- name: Upload images to servers
+  hosts: servers
+  vars:
+    local_workdir: "/home/{{ lookup('env', 'USER') }}/cinic_10_per_client"
+  tasks:
+    - name: Extract the test and validation datasets
+      unarchive:
+        src: "{{ local_workdir }}/test-valid.zip"
+        dest: "{{ dataset_dir }}"

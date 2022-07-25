@@ -1,0 +1,29 @@
+---
+
+plugin: 'aise.dsu.docker'
+
+machines:
+  - address: 172.25.17.130
+    role: server
+  - 172.25.17.131
+  - address: 172.25.17.132
+    num_containers: 3
+    poisoned_containers: [0, 1]
+  - 172.25.17.134
+  - agx9.nodes.edgelab.network
+  - agx10.nodes.edgelab.network
+
+containers_per_machine: 1
+
+credentials:
+  vm:
+    user: root
+    pass: ~
+  agx:
+    user: nvidia
+    pass: nvidia
+
+vars:
+  workspace_dir: "/opt/fl"
+  dataset_dir: "{{ workspace_dir }}/dataset"
+  docker_image: nkakouros/flwr-run:latest

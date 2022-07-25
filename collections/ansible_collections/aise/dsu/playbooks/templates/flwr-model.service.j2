@@ -1,0 +1,18 @@
+[Unit]
+Description=Runs a Flower client in a docker container
+After=docker.service
+Requires=docker.service
+
+[Service]
+TimeoutStartSec=0
+Restart=always
+
+WorkingDirectory={{ systemd_working_dir }}
+PassEnvironment=flmodel_role flmodel_config
+
+ExecStartPre=-/usr/bin/docker stop %n
+ExecStartPre=-/usr/bin/docker rm %n
+ExecStart=/usr/bin/docker run --pull always --rm --name %n -e role=${role} -e config=${config} -v {{ dataset_dir }}:/data -v {{ workspace_dir }}/code:/app -p 8080:8080 nkakouros/flwr-run:latest
+
+[Install]
+WantedBy=multi-user.target
