@@ -5,14 +5,13 @@ Requires=docker.service
 
 [Service]
 TimeoutStartSec=0
-Restart=always
+Restart=no
 
 WorkingDirectory={{ systemd_working_dir }}
-PassEnvironment=flmodel_role flmodel_config
 
-ExecStartPre=-/usr/bin/docker stop %n
-ExecStartPre=-/usr/bin/docker rm %n
-ExecStart=/usr/bin/docker run --pull always --rm --name %n -e role=${role} -e config=${config} -v {{ dataset_dir }}:/data -v {{ workspace_dir }}/code:/app -p 8080:8080 nkakouros/flwr-run:latest
+ExecStartPre=-/usr/bin/docker kill -s 9 %i
+ExecStartPre=-/usr/bin/docker rm %i
+ExecStart=/usr/bin/docker run --pull always --rm --name %i -e role={{ flmodel_role }} -v {{ dataset_dir }}:/data -v {{ workspace_dir }}/code:/app {{ '-p 8080:8080' if flmodel_role == 'server' else '' }} nkakouros/flwr-run:latest
 
 [Install]
 WantedBy=multi-user.target

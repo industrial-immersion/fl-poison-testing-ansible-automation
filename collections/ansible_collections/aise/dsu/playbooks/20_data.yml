@@ -109,7 +109,7 @@
     client_index: "{{ groups['docker_clients'].index(inventory_hostname) }}"
     num_of_clients: "{{ groups['docker_clients'] | length }}"
     train_zip: "{{ local_workdir }}/i{{ client_index }}c{{ num_of_clients }}.zip"
-    extraction_path: "{{ dataset_dir }}/{{ (train_zip | basename | splitext)[0] }}"
+    extraction_path: "{{ dataset_dir }}/{{ train_zip | basename | splitext | first }}"
   tasks:
     - delegate_to: "{{ docker_server }}"
       block:
@@ -126,8 +126,10 @@
         - name: Create a link to the currrent train folder
           file:
             state: link
-            src: "{{ extraction_path }}"
-            dest: "{{ extraction_path | dirname }}/train"
+            src: "/data/{{ train_zip | basename | splitext | first }}" # path to where the container expects to find the folder
+            dest: "{{ dataset_dir }}/train"
+            force: true
+            follow: false  # silence a warning
 
         - name: Extract the test and validation datasets
           unarchive:

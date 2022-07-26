@@ -1,33 +1,35 @@
 ---
 
-- name: Run the app in the server
+- name: Run the server(s)
   hosts: servers
   tasks:
     - name: Run the docker image for the server
       systemd:
-        name: flwr-model.server
+        name: flwr-model@server
         daemon_reload: true
-        state: started
-      env:
+        state: restarted
+      environment:
         flmodel_role: server
-        flmodel_config: /app/configs/config.docker.yml
 
-- name: Run the app in the clients
+- name: Run the clients
   hosts: docker_clients
+  gather_facts: false
   tasks:
     - name: Check the server is up
       wait_for:
-        host: "{{ server }}"
+        host: "{{ hostvars[server]['ansible_host'] }}"
         port: 8080
+        timeout: 10
       loop: "{{ groups['servers'] }}"
       loop_control:
         loop_var: server
+      delegate_to: localhost
 
     - name: Run the docker image for the clients
       systemd:
-        name: "flwr-model.{{ inventory_hostame }}"
+        name: "flwr-model@{{ inventory_hostname }}"
         daemon_reload: true
-        state: started
-      env:
+        state: restarted
+      environment:
         flmodel_role: client
-        flmodel_config: /app/configs/config.docker.yml
+      delegate_to: "{{ docker_server }}"
