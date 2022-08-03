@@ -36,7 +36,7 @@
         - name: Clone code repo
           git:
             repo: 'git@github.com:industrial-immersion/FLModel.git'
-            version: master
+            version: votingServer
             dest: /tmp/code
             depth: 1
           delegate_to: localhost
@@ -58,6 +58,7 @@
             src: /tmp/code.gz
             dest: "{{ workspace_dir }}"
 
+
     - name: Create systemd file to manage the docker containers
       template:
         src: flwr-model.service.j2
@@ -67,10 +68,33 @@
         systemd_working_dir: "{{ dataset_dir }}"
         flmodel_role: "{{ 'server' if inventory_hostname in groups['servers'] else 'client' }}"
 
-    - name: Pull image
-      community.docker.docker_image:
-        name: "{{ docker_image }}"
-        source: pull
+  handlers:
+    - name: Reload systemd service files
+      systemd:
+        daemon_reload: true
+      listen: reload-systemd
+
+
+- name: Install systemd override files
+  gather_facts: false
+  hosts: docker_clients
+  tasks:
+    - name: Create directory for override file
+      file:
+        path: /etc/systemd/system/flwr-model@{{ inventory_hostname }}.service.d
+        state: directory
+      delegate_to: "{{ docker_server }}"
+      notify: reload-systemd
+
+    - name: Create systemd override files
+      copy:
+        content: |
+          [Service]
+          Environment=flmodel_poisoned={{ inventory_hostname in groups['poisoned_clients'] }}
+        dest: /etc/systemd/system/flwr-model@{{ inventory_hostname }}.service.d/override.conf
+      delegate_to: "{{ docker_server }}"
+      notify: reload-systemd
+
   handlers:
     - name: Reload systemd service files
       systemd:

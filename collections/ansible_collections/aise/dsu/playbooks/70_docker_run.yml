@@ -8,8 +8,6 @@
         name: flwr-model@server
         daemon_reload: true
         state: restarted
-      environment:
-        flmodel_role: server
 
 - name: Run the clients
   hosts: docker_clients
@@ -19,7 +17,7 @@
       wait_for:
         host: "{{ hostvars[server]['ansible_host'] }}"
         port: 8080
-        timeout: 10
+        timeout: 600
       loop: "{{ groups['servers'] }}"
       loop_control:
         loop_var: server
@@ -30,6 +28,4 @@
         name: "flwr-model@{{ inventory_hostname }}"
         daemon_reload: true
         state: restarted
-      environment:
-        flmodel_role: client
       delegate_to: "{{ docker_server }}"

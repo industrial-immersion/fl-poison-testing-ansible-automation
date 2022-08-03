@@ -6,12 +6,14 @@ Requires=docker.service
 [Service]
 TimeoutStartSec=0
 Restart=no
+Environment=flmodel_poisoned=False
 
 WorkingDirectory={{ systemd_working_dir }}
 
+TimeoutStopSec=1
 ExecStartPre=-/usr/bin/docker kill -s 9 %i
 ExecStartPre=-/usr/bin/docker rm %i
-ExecStart=/usr/bin/docker run --pull always --rm --name %i -e role={{ flmodel_role }} -v {{ dataset_dir }}:/data -v {{ workspace_dir }}/code:/app {{ '-p 8080:8080' if flmodel_role == 'server' else '' }} nkakouros/flwr-run:latest
+ExecStart=/usr/bin/docker run --pull always --rm --name %i -e role={{ flmodel_role }} -e poisoned=${flmodel_poisoned} -v {{ dataset_dir }}:/data -v {{ workspace_dir }}/code:/app {{ '-p 8080:8080' if flmodel_role == 'server' else '' }} nkakouros/flwr-run:latest
 
 [Install]
 WantedBy=multi-user.target
